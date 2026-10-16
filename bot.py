@@ -23,10 +23,8 @@ logger = logging.getLogger("spektr")
 
 async def main():
     if not BOT_TOKEN:
-        logger.error("BOT_TOKEN is empty. Copy .env.example to .env and fill BOT_TOKEN / ADMIN_ID.")
+        logger.error("BOT_TOKEN is empty.")
         sys.exit(1)
-    if not ADMIN_ID:
-        logger.warning("ADMIN_ID is 0 — admin features disabled until set.")
 
     init_db()
     logger.info("DB ready")
