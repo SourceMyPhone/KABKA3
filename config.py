@@ -68,3 +68,8 @@ DELIVERY = {
     "drop": "Закладка",
     "post": "Почта",
 }
+
+# Shared secret for website → bot order webhook
+ORDER_SECRET = os.getenv("ORDER_SECRET", "change-me")
+# HTTP port for order API (Railway sets PORT)
+HTTP_PORT = int(os.getenv("PORT", os.getenv("HTTP_PORT", "8080")))

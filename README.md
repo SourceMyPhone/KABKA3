@@ -2,72 +2,68 @@
 
 Telegram-бот: каталог, регистрация, заказы с анкетой, админ-панель.
 
-## Быстрый старт
+## Локальный запуск
 
 ```bash
 python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
-
 cp .env.example .env
-# отредактируй .env — впиши BOT_TOKEN и ADMIN_ID
-
+# заполни BOT_TOKEN и ADMIN_ID в .env
 python bot.py
 ```
 
-## Переменные окружения
+## Деплой на Railway (работает 24/7)
 
-| Переменная   | Описание                          |
-|--------------|-----------------------------------|
-| `BOT_TOKEN`  | токен от @BotFather               |
-| `ADMIN_ID`   | твой Telegram user id             |
-| `DB_PATH`    | путь к SQLite (по умолчанию spektr.db) |
+1. Залей репозиторий на GitHub (без `.env`, без `spektr.db`, без `__pycache__`).
+2. Зайди на [railway.app](https://railway.app) → New Project → Deploy from GitHub repo.
+3. Выбери репозиторий.
+4. Variables → добавь:
+   - `BOT_TOKEN` = токен бота
+   - `ADMIN_ID` = твой Telegram ID
+5. Deploy. В логах должно быть `Bot starting…`.
 
-Секреты **не** хранятся в коде. Файл `.env` в `.gitignore`.
+Railway сам подхватит `Procfile` / `railway.json`.
 
-## Клиент
+### Важно
 
-- `/start` — приветствие
-- `/reg` — регистрация (имя + @telegram)
-- **Каталог** → товар → **Оформить заказ**
-- Анкета заказа:
-  1. Город
-  2. Способ (курьер / закладка / почта)
-  3. Время
-  4. Комментарий
-- Подтверждение → заказ уходит админу
-- Мои заказы / Профиль / Помощь
+- Не коммить `.env` и `spektr.db`.
+- Удали из репо папку `__pycache__` если уже залита.
+- SQLite на Railway живёт на эфемерном диске — при редеплое база может обнулиться. Для продакшена лучше Volume или внешняя БД.
 
-## Админ
+## Анкета заказа
 
-- Уведомление о каждом заказе с кнопками **Принять** / **Отклонить**
-- Клиент получает результат
-- Панель (`Админ` или `/admin`): статистика, заказы, логи
+Одним сообщением, 4 строки:
+
+```
+Город
+Способ (курьер / закладка / почта)
+Время
+Комментарий
+```
+
+Пример:
+
+```
+Москва
+закладка
+18:00–21:00
+рядом с метро
+```
+
+## Переменные
+
+| Переменная  | Описание        |
+|-------------|-----------------|
+| BOT_TOKEN   | токен @BotFather |
+| ADMIN_ID    | твой Telegram ID |
+| DB_PATH     | путь к SQLite    |
 
 ## Структура
 
 ```
-spektr-bot/
-├── bot.py
-├── config.py
-├── db.py
-├── keyboards.py
-├── handlers/
-│   ├── user.py
-│   └── admin.py
-├── .env.example
-├── .gitignore
-├── requirements.txt
-└── README.md
+bot.py  config.py  db.py  keyboards.py
+handlers/user.py  handlers/admin.py
+Procfile  railway.json  runtime.txt
+.env.example  .gitignore  requirements.txt
 ```
-
-## Безопасность при публикации на GitHub
-
-1. В репозитории только `.env.example` (без реальных токенов).
-2. `.env`, `*.db`, `venv/` — в `.gitignore`.
-3. Если токен когда-либо светился — **отзови** его у @BotFather и создай новый.
-4. `ADMIN_ID` только через env.
-
-## Лицензия
-
-MIT

@@ -3,7 +3,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton
 )
-from config import CATALOG, DELIVERY
+from config import CATALOG
 
 
 def main_kb(is_admin: bool = False):
@@ -34,15 +34,6 @@ def product_kb(product_id: str):
         [InlineKeyboardButton(text="Оформить заказ", callback_data=f"order:{product_id}")],
         [InlineKeyboardButton(text="« К каталогу", callback_data="catalog")],
     ])
-
-
-def delivery_kb():
-    buttons = [
-        [InlineKeyboardButton(text=label, callback_data=f"deliv:{key}")]
-        for key, label in DELIVERY.items()
-    ]
-    buttons.append([InlineKeyboardButton(text="Отмена", callback_data="catalog")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def confirm_order_kb():

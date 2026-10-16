@@ -12,7 +12,7 @@ from db import (
 )
 from keyboards import (
     main_kb, catalog_kb, product_kb,
-    delivery_kb, confirm_order_kb, cancel_kb
+    confirm_order_kb, cancel_kb
 )
 
 router = Router()
@@ -24,10 +24,7 @@ class RegStates(StatesGroup):
 
 
 class OrderStates(StatesGroup):
-    city = State()
-    delivery = State()
-    delivery_time = State()
-    comment = State()
+    form = State()
 
 
 def is_registered(user_id: int) -> bool:
@@ -145,6 +142,22 @@ async def show_product(callback: CallbackQuery):
     await callback.answer()
 
 
+# ── анкета в одном сообщении ────────────────────────────
+
+FORM_HINT = (
+    "Заполни одним сообщением (каждая строка — отдельное поле):\n\n"
+    "<code>Город\n"
+    "Способ (курьер / закладка / почта)\n"
+    "Время\n"
+    "Комментарий</code>\n\n"
+    "Пример:\n"
+    "<code>Москва\n"
+    "закладка\n"
+    "18:00–21:00\n"
+    "рядом с метро</code>"
+)
+
+
 @router.callback_query(F.data.startswith("order:"))
 async def order_start(callback: CallbackQuery, state: FSMContext):
     uid = callback.from_user.id
@@ -156,83 +169,58 @@ async def order_start(callback: CallbackQuery, state: FSMContext):
     if not item:
         await callback.answer("Не найдено", show_alert=True)
         return
-    await state.set_state(OrderStates.city)
+    await state.set_state(OrderStates.form)
     await state.update_data(product_id=pid)
     await callback.message.edit_text(
         f"Заказ: <b>{item['title']}</b>\n"
         f"Цена: {item['price_text']}\n\n"
-        "<b>1/4</b> Город доставки:",
+        f"{FORM_HINT}",
         parse_mode="HTML"
     )
     await callback.answer()
 
 
-@router.message(OrderStates.city)
-async def order_city(message: Message, state: FSMContext):
+def _parse_form(text: str):
+    lines = [ln.strip() for ln in (text or "").strip().splitlines() if ln.strip()]
+    if len(lines) < 3:
+        return None
+    city = lines[0][:100]
+    delivery_raw = lines[1].lower()
+    # normalize delivery
+    delivery = None
+    for key, label in DELIVERY.items():
+        if key in delivery_raw or label.lower() in delivery_raw:
+            delivery = label
+            break
+    if delivery is None:
+        delivery = lines[1][:80]
+    delivery_time = lines[2][:120]
+    comment = " ".join(lines[3:])[:500] if len(lines) > 3 else ""
+    return city, delivery, delivery_time, comment
+
+
+@router.message(OrderStates.form)
+async def order_form(message: Message, state: FSMContext):
     if message.text == "Отмена":
         await state.clear()
         await message.answer("Отменено.", reply_markup=main_kb(message.from_user.id == ADMIN_ID))
         return
-    city = (message.text or "").strip()
-    if len(city) < 2 or len(city) > 100:
-        await message.answer("Укажи город (2–100 символов):")
+
+    parsed = _parse_form(message.text or "")
+    if not parsed:
+        await message.answer(
+            "Нужно минимум 3 строки: город, способ, время.\n\n" + FORM_HINT,
+            parse_mode="HTML"
+        )
         return
-    await state.update_data(city=city)
-    await state.set_state(OrderStates.delivery)
-    await message.answer(
-        "<b>2/4</b> Способ получения:",
-        reply_markup=delivery_kb(),
-        parse_mode="HTML"
+
+    city, delivery, delivery_time, comment = parsed
+    await state.update_data(
+        city=city,
+        delivery=delivery,
+        delivery_time=delivery_time,
+        comment=comment,
     )
-
-
-@router.callback_query(F.data.startswith("deliv:"), OrderStates.delivery)
-async def order_delivery(callback: CallbackQuery, state: FSMContext):
-    key = callback.data.split(":")[1]
-    label = DELIVERY.get(key)
-    if not label:
-        await callback.answer("Не найдено", show_alert=True)
-        return
-    await state.update_data(delivery=label)
-    await state.set_state(OrderStates.delivery_time)
-    await callback.message.edit_text(
-        f"Способ: <b>{label}</b>\n\n"
-        "<b>3/4</b> Удобное время (например: 14:00–18:00, завтра вечером):",
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-@router.message(OrderStates.delivery_time)
-async def order_time(message: Message, state: FSMContext):
-    if message.text == "Отмена":
-        await state.clear()
-        await message.answer("Отменено.", reply_markup=main_kb(message.from_user.id == ADMIN_ID))
-        return
-    t = (message.text or "").strip()
-    if len(t) < 1 or len(t) > 120:
-        await message.answer("Укажи время (до 120 символов):")
-        return
-    await state.update_data(delivery_time=t)
-    await state.set_state(OrderStates.comment)
-    await message.answer(
-        "<b>4/4</b> Комментарий (детали, ориентир).\n"
-        "Или напиши «-» чтобы пропустить:",
-        parse_mode="HTML"
-    )
-
-
-@router.message(OrderStates.comment)
-async def order_comment(message: Message, state: FSMContext):
-    if message.text == "Отмена":
-        await state.clear()
-        await message.answer("Отменено.", reply_markup=main_kb(message.from_user.id == ADMIN_ID))
-        return
-    comment = (message.text or "").strip()
-    if comment == "-":
-        comment = ""
-    comment = comment[:500]
-    await state.update_data(comment=comment)
     data = await state.get_data()
     pid = data.get("product_id")
     item = CATALOG.get(pid)
@@ -240,13 +228,14 @@ async def order_comment(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("Ошибка. Начни заново.")
         return
+
     text = (
         f"<b>Проверь заказ</b>\n\n"
         f"Товар: {item['title']}\n"
         f"Цена: {item['price_text']}\n"
-        f"Город: {data.get('city', '—')}\n"
-        f"Получение: {data.get('delivery', '—')}\n"
-        f"Время: {data.get('delivery_time', '—')}\n"
+        f"Город: {city}\n"
+        f"Получение: {delivery}\n"
+        f"Время: {delivery_time}\n"
         f"Комментарий: {comment or '—'}\n\n"
         f"Всё верно?"
     )
